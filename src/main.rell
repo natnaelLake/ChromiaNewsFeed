@@ -1,0 +1,257 @@
+// module;
+
+// import lib.ft4.accounts.{ account, single_sig_auth_descriptor };
+// import lib.ft4.auth;
+// import registration.*;
+// entity user {
+//     mutable name;
+//     key id: byte_array;
+//     key account;
+// }
+
+// entity follower {
+//     index user;
+//     index follower: user;
+//     key user, follower;
+// }
+
+// entity post {
+//     timestamp = op_context.last_block_time;
+//     index user;    content: text;
+
+// }
+
+// operation create_user(name, pubkey) {
+//     val account_id = Unsafe.create_account_with_auth(single_sig_auth_descriptor(pubkey, set(["MySession"])));
+//     create user ( name, pubkey, account @ { account_id } );
+// }
+
+// @extend(auth.auth_handler)
+// function () = auth.add_auth_handler(
+//   flags = ["MySession"]
+// );
+
+// operation make_post(content: text) {
+//   val account = auth.authenticate();
+//   require(content.size() <= 255, "A post cannot be longer than 255 letters");
+//   val user = user @ { account };
+//   create post ( user, content );
+// }
+// operation register_account(name, evm_address: byte_array, signature) {
+//     require(op_context.get_signers().size() > 0, "Must sign with a session keypair");
+//     val account = evm.create_account_from_evm(evm_address, signature);
+//     val user = create user ( name, evm_address, account );
+//     create follower ( user = user, follower = user );
+//     add_auth_descriptor_to_account(account, single_sig_auth_descriptor(op_context.get_signers()[0], set(["MySession"])));
+// }
+// operation follow_user(follow_id: byte_array) {
+//   val account = auth.authenticate();
+//   val user = user @ { account };
+//   val follow = require_user(follow_id);
+//   create follower ( user = follow, follower = user );
+// }
+
+// operation unfollow_user(unfollow_id: byte_array) {
+//   val account = auth.authenticate();
+//   val user = user @ { account };
+//   val follow = require_user(unfollow_id);
+//   delete follower @? { .user == follow, .follower == user };
+// }
+
+// query get_followers_count(user_id: pubkey): integer {
+//     return follower @ { .user == require_user(user_id) } ( @sum 1 );
+// }
+
+// query get_following_count(user_id: pubkey): integer {
+//     return follower @ { .follower == require_user(user_id) } ( @sum 1 );
+// }
+
+// query is_following(my_id: byte_array, your_id: byte_array) =
+//   exists(follower @? { .user.id == your_id, .follower.id == my_id });
+
+// struct post_dto {
+//     timestamp;
+//     user: struct<user>;
+//     content: text;
+// }
+
+// query get_posts(
+//     user_id: byte_array,
+//     pointer: integer,
+//     n_posts: integer
+// ): (pointer: integer, posts: list<post_dto>) {
+//     val posts = (user, follower, post) @* {
+//         user.id == user_id,
+//         follower.follower == user,
+//         post.user == follower.user
+//     } (
+//         @sort_desc @omit post.rowid,
+//         post_dto (
+//             post.timestamp,
+//             post.content,
+//             user = post.user.to_struct()
+//         )
+//     ) offset pointer limit n_posts;
+
+//     return (
+//         pointer = pointer + posts.size(),
+//         posts = posts
+//     );
+// }
+
+// query get_user_name(user_id: byte_array): text {
+//     return format_user(require_user(user_id));
+// }
+
+// query get_users(pointer: integer, n_users: integer) {
+//     val users = user @* { } ( name = format_user ($), id = .id ) offset pointer limit n_users;
+//     return (
+//         pointer = pointer + users.size(),
+//         users = users
+//     );
+// }
+
+// function require_is_signer(pubkey) = require(op_context.is_signer(pubkey), "User must sign this operation");
+
+// function require_user(id: byte_array) = require(user @? { id }, "User with id %b does not exist".format(id));
+
+// function format_user(user) = "%s#%s".format(user.name, user.id.to_hex().sub(0, 5));
+module;
+
+import lib.ft4.accounts. {
+    add_auth_descriptor_to_account,
+    auth_descriptor,
+    auth_type,
+    single_sig_auth_descriptor,
+    Unsafe,
+    account
+};
+import lib.ft4.auth. { signature, _recover_eth_address };
+import lib.ft4.auth;
+@extend(auth.auth_handler)
+function () = auth.add_auth_handler(
+    flags = ["MySession"]
+);
+
+namespace evm {
+    query get_register_message(evm_address: byte_array) =
+        "Create account for EVM wallet:\n%s"
+        .format(evm_address.to_hex().lower_case());
+
+    function create_account_from_evm(evm_address: byte_array, signature): account {
+        val register_msg = get_register_message(evm_address);
+        val recovered_address = _recover_eth_address(register_msg, signature);
+        require(recovered_address == evm_address, "Signature not valid for the provided key");
+
+        val auth_descriptor = auth_descriptor(
+            auth_type = auth_type.ES,
+            args = [["A"].to_gtv(), evm_address.to_gtv()],
+            rules = null.to_gtv()
+        );
+        val accountId = Unsafe.create_account_with_auth(auth_descriptor);
+        return account @ { accountId };
+    }
+}
+
+entity user {
+    mutable name;
+    key id: byte_array;
+    key account;
+}
+
+entity follower {
+    index user;
+    index follower: user;
+    key user, follower;
+}
+
+entity post {
+    timestamp = op_context.last_block_time;
+    index user;
+    content: text;
+}
+
+operation create_user(name, pubkey) {
+    val account_id = Unsafe.create_account_with_auth(single_sig_auth_descriptor(pubkey, set(["MySession"])));
+    create user ( name, pubkey, account @ { account_id } );
+}
+
+operation make_post(content: text) {
+    val account = auth.authenticate();
+    require(content.size() <= 255, "A post cannot be longer than 255 letters");
+    val user = user @ { account };
+    create post ( user, content );
+}
+
+operation follow_user(follow_id: byte_array) {
+    val account = auth.authenticate();
+    val user = user @ { account };
+    val follow = require_user(follow_id);
+    create follower ( user = follow, follower = user );
+}
+
+operation unfollow_user(unfollow_id: byte_array) {
+    val account = auth.authenticate();
+    val user = user @ { account };
+    val follow = require_user(unfollow_id);
+    delete follower @? { .user == follow, .follower == user };
+}
+
+query get_user_name(user_id: byte_array): text {
+    return format_user(require_user(user_id));
+}
+
+query get_users(pointer: integer, n_users: integer) {
+    val users = user @* { } ( name = format_user ($), id = .id ) offset pointer limit n_users;
+    return (
+        pointer = pointer + users.size(),
+        users = users
+    );
+}
+
+query get_followers_count(user_id: pubkey): integer {
+    return follower @ { .user == require_user(user_id) } ( @sum 1 );
+}
+
+query get_following_count(user_id: pubkey): integer {
+    return follower @ { .follower == require_user(user_id) } ( @sum 1 );
+}
+
+query is_following(my_id: byte_array, your_id: byte_array) =
+  exists(follower @? { .user.id == your_id, .follower.id == my_id });
+
+struct post_dto {
+    timestamp;
+    user: struct<user>;
+    content: text;
+}
+
+query get_posts(
+    user_id: byte_array,
+    pointer: integer,
+    n_posts: integer
+): (pointer: integer, posts: list<post_dto>) {
+    val posts = (user, follower, post) @* {
+        user.id == user_id,
+        follower.follower == user,
+        post.user == follower.user
+    } (
+        @sort_desc @omit post.rowid,
+        post_dto (
+            post.timestamp,
+            post.content,
+            user = post.user.to_struct()
+        )
+    ) offset pointer limit n_posts;
+
+    return (
+        pointer = pointer + posts.size(),
+        posts = posts
+    );
+}
+
+function require_is_signer(pubkey) = require(op_context.is_signer(pubkey), "User must sign this operation");
+
+function require_user(id: byte_array) = require(user @? { id }, "User with id %b does not exist".format(id));
+
+function format_user(user) = "%s#%s".format(user.name, user.id.to_hex().sub(0, 5));
