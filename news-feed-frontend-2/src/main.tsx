@@ -5,6 +5,8 @@ import { RouterProvider } from "react-router-dom";
 import { ContextProvider } from "./components/ContextProvider.tsx";
 import { ThemeProvider } from "@mui/styles";
 import { createTheme } from "@mui/material";
+import { Buffer } from "buffer";
+window.Buffer = Buffer;
 const theme = createTheme({
   // Define your theme properties here
 });

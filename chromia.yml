@@ -2,15 +2,11 @@ blockchains:
   news-feed:
     module: main
     moduleArgs:
-      lib.ft4.accounts:
-        rate_limit_active: 1
-        rate_limit_max_points: 10
-        rate_limit_recovery_time: 5000
-        rate_limit_points_at_account_creation: 1
-compile:
-  rellVersion: 0.12.0
+      lib.ft4.core.admin:
+        admin_pubkey: 029CDE79EB1A4D415C1B610E3A6320ECF2E2F7F6C92F0975365CB8D70791024F71
 database:
-  schema: schema_social_media
+  schema: schema_news_feed_media
+
 test:
   modules:
     - test
@@ -18,7 +14,10 @@ test:
 libs:
   ft4:
     registry: https://bitbucket.org/chromawallet/ft3-lib
-    tagOrBranch: v0.1.7r
     path: rell/src/lib/ft4
-    rid: x"AF18D94EC9B01F9FD82BCE6B12F68D83CF19C9E2B2CDFB49C8AA2C9AA38B31B4"
+    tagOrBranch: v0.7.0r
+    rid: x"F7C207AA595ABD25FDE5C2C2E32ECD3768B480AD03D1F2341548FF4F37D9B7AF"
     insecure: false
+
+compile:
+  rellVersion: 0.12.0

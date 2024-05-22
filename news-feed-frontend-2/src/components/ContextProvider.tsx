@@ -102,7 +102,7 @@ export function ContextProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     console.log("***********************",session);
     initSession();
-  }, []);
+  }, [session]);
 
   return (
     <ChromiaContext.Provider value={session}>

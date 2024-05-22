@@ -1,14 +1,16 @@
 module;
 
 import lib.ft4.accounts. {
-    add_auth_descriptor_to_account,
     auth_descriptor,
     auth_type,
     single_sig_auth_descriptor,
-    Unsafe,
-    account
+    account,
+    create_account_with_auth,
+    add_auth_descriptor
+    // add_auth_descriptor_to_account
 };
-import lib.ft4.auth. { signature, _recover_eth_address };
+
+import lib.ft4.auth. { signature };
 import lib.ft4.auth;
 @extend(auth.auth_handler)
 function () = auth.add_auth_handler(
@@ -22,16 +24,15 @@ namespace evm {
 
     function create_account_from_evm(evm_address: byte_array, signature): account {
         val register_msg = get_register_message(evm_address);
-        val recovered_address = _recover_eth_address(register_msg, signature);
-        require(recovered_address == evm_address, "Signature not valid for the provided key");
-
+        // val recovered_address = _recover_eth_address(register_msg, signature);
+        // require(recovered_address == evm_address, "Signature not valid for the provided key");
         val auth_descriptor = auth_descriptor(
-            auth_type = auth_type.ES,
+            auth_type = auth_type.M,
             args = [["A"].to_gtv(), evm_address.to_gtv()],
             rules = null.to_gtv()
         );
-        val accountId = Unsafe.create_account_with_auth(auth_descriptor);
-        return account @ { accountId };
+        val id = create_account_with_auth(auth_descriptor);
+        return account @ { id.id };
     }
 }
 
@@ -52,10 +53,21 @@ entity post {
     index user;
     content: text;
 }
-
+operation register_account(name, evm_address: byte_array, signature) {
+    require(op_context.get_signers().size() > 0, "Must sign with a session keypair");
+    val account = evm.create_account_from_evm(evm_address, signature);
+    val user = create user ( name, evm_address, account );
+    create follower ( user = user, follower = user );
+    val auth_descriptor = auth_descriptor(
+            auth_type = auth_type.M,
+            args = [signature.to_gtv(), evm_address.to_gtv()],
+            rules = signature.to_gtv()
+        );
+    add_auth_descriptor(account, auth_descriptor);
+}
 operation create_user(name, pubkey) {
-    val account_id = Unsafe.create_account_with_auth(single_sig_auth_descriptor(pubkey, set(["MySession"])));
-    create user ( name, pubkey, account @ { account_id } );
+    val account_id = create_account_with_auth(single_sig_auth_descriptor(pubkey, set(["MySession"])));
+    create user ( name, pubkey, account @ {  } );
 }
 
 operation make_post(content: text) {
@@ -113,7 +125,7 @@ query get_posts(
     pointer: integer,
     n_posts: integer
 ): (pointer: integer, posts: list<post_dto>) {
-    val posts = (user, follower, post) @* {
+    val posts = ( user, follower, post) @* {
         user.id == user_id,
         follower.follower == user,
         post.user == follower.user

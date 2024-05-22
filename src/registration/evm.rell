@@ -1,12 +1,11 @@
 import lib.ft4.accounts. {
-    add_auth_descriptor_to_account,
     auth_descriptor,
+    create_account_with_auth,
     auth_type,
     single_sig_auth_descriptor,
-    Unsafe,
     account
 };
-import lib.ft4.auth. { signature, _recover_eth_address };
+import lib.ft4.auth. { signature };
 namespace evm {
     query get_register_message(evm_address: byte_array) =
         "Create account for EVM wallet:\n%s"
@@ -14,15 +13,15 @@ namespace evm {
 
     function create_account_from_evm(evm_address: byte_array, signature): account {
         val register_msg = get_register_message(evm_address);
-        val recovered_address = _recover_eth_address(register_msg, signature);
-        require(recovered_address == evm_address, "Signature not valid for the provided key");
+        // val recovered_address = _recover_eth_address(register_msg, signature);
+        // require(recovered_address == evm_address, "Signature not valid for the provided key");
 
         val auth_descriptor = auth_descriptor(
-            auth_type = auth_type.ES,
+            auth_type = auth_type.M,
             args = [["A"].to_gtv(), evm_address.to_gtv()],
             rules = null.to_gtv()
         );
-        val accountId = Unsafe.create_account_with_auth(auth_descriptor);
-        return account @ { accountId };
+        val accountId = create_account_with_auth(auth_descriptor);
+        return account @ { accountId.id };
     }
 }
